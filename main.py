@@ -14,8 +14,8 @@ class ExchangeRateQueryPlugin(Star):
         super().__init__(context)
         self.api_key: str = config.get("api_key", "")
         self.fuzzy_match: int = config.get("fuzzy_match", True)
-        self.base_currency: dict = config.get("base_currency", "USD")
-        self.default_currencies: List[str] = config.get("target_currencies", ["CNY", "EUR", "JPY"])
+        self.base_currency: dict = config.get("base_currency", "CNY")
+        self.default_currencies: List[str] = config.get("target_currencies", ["USD", "EUR", "JPY"])
 
         if not self.api_key:
             logger.error("未配置OpenExchangeRates API KEY!")
@@ -25,17 +25,57 @@ class ExchangeRateQueryPlugin(Star):
 
     @filter.command("exrate帮助", alias={"汇率查询"})
     async def exchange_query_help(self, event: AstrMessageEvent):
-        yield event.plain_result("""
-        【汇率查询帮助】
-        请先于控制台配置默认基准货币和目标货币
-        查询命令：/exrate
-        """)
+        yield event.plain_result("📅【汇率查询帮助】\n请先于控制台配置默认基准货币和目标货币\n默认查询命令：\n/usage :查询key的健康值\n/exrate :查询配置的汇率\n/exrate USD JPY :查询美元和日元的汇率")
+
+    @filter.command("usage", alias={"健康值"})
+    async def usage_query(self, event: AstrMessageEvent):
+        """获取OpenExchangeRates API KEY健康值"""
+        if not self.api_key:
+            yield event.plain_result("控制台未配置API密钥")
+            return
+
+        try:
+            # 获取API使用信息
+            usage_info = await self.client.check_usage_info()
+            logger.debug(f"查询usage: {usage_info}")
+
+            # 安全获取数据字段
+            data = usage_info.get("data", {})
+            usage_data = data.get("usage", {})
+            plan_data = data.get("plan", {})
+
+            # 构建健康报告
+            report = [
+                "【OpenExchangeRates API 健康报告】",
+                f"📊 套餐计划: {plan_data.get('name', '未知')}",
+                f"🔢 更新频率: {plan_data.get('update_frequency', 0)}",
+                "",
+                f"📈 请求限额: {usage_data.get('requests_quota', 0)} 次/月",
+                f"• 已用请求: {usage_data.get('requests', 0)} 次",
+                f"• 剩余额度: {usage_data.get('requests_remaining', 0)} 次",
+                f"• 本月已过: {usage_data.get('days_elapsed', 0)} 天",
+                f"• 剩余天数: {usage_data.get('days_remaining', 0)} 天",
+                f"📅 日均用量: {usage_data.get('daily_average', 0)} 次/天"
+            ]
+
+            # 计算健康指标
+            remaining_percent = (usage_data.get("requests_remaining", 0) / usage_data.get("requests_quota", 1)) * 100
+            health_icon = "✅" if remaining_percent > 20 else "⚠️" if remaining_percent > 5 else "❌"
+
+            report.append(f"\n{health_icon} 健康状态: {remaining_percent:.1f}% 剩余额度")
+
+            yield event.plain_result("\n".join(report))
+
+        except Exception as e:
+            logger.error(f"健康值查询失败: {str(e)}")
+            yield event.plain_result("获取健康值失败，请检查服务器日志")
 
     @filter.command("exrate", alias={"汇率查询"})
     async def exchange_rate_query(self, event: AstrMessageEvent):
-        """查询货币汇率
-        格式：/exrate [基准货币] [目标货币1] [目标货币2]...
-        示例：/exrate USD CNY JPY
+        """
+        查询货币汇率
+        格式：/exrate [基准货币] [目标货币]
+        示例：/exrate USD JPY
         """
         if not self.api_key:
             yield event.plain_result("控制台未配置API密钥")
@@ -84,8 +124,8 @@ class ExchangeRateQueryPlugin(Star):
         targets: List[str]
     ) -> str:
         """格式化汇率对比结果"""
-        header = f"【{base} 汇率对比】\n"
-        separator = "-" * 45 + "\n"
+        header = f"📈 【{base} 汇率对比报告】\n"
+        separator = "\n"
         table_header = "货币 | 当前汇率 | 一周前   | 变化\n"
 
         rows = []
@@ -95,9 +135,9 @@ class ExchangeRateQueryPlugin(Star):
 
             if curr_rate and hist_rate:
                 change = curr_rate - hist_rate
+                arrow = "↑" if change > 0 else ("↓" if change < 0 else "→")
                 row = (
-                    f"{currency:4} | {curr_rate:8.4f} | {hist_rate:8.4f} | "
-                    f"{'+' if change >=0 else ''}{change:.4f}"
+                    f"{currency:3}| {curr_rate:.2f} | {hist_rate:.2f} | {change:.4f}{arrow}"
                 )
                 rows.append(row)
 
