@@ -1,6 +1,6 @@
 name: ExchangeRateQuery
 desc: 简单的实时货币汇率查询插件
 help: 输入 /exrate帮助 查看关键词回复帮助。
-version: v1.0
+version: v1.1
 author: MoonShadow1976
 repo: https://github.com/MoonShadow1976/astrbot_plugin_ExchangeRateQuery

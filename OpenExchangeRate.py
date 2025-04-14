@@ -1,4 +1,3 @@
-# OpenExchangeRate.py
 import aiohttp
 from typing import Dict, Optional
 

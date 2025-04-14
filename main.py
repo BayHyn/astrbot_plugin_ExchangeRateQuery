@@ -8,7 +8,7 @@ from .OpenExchangeRate import OpenExchangeRate
 from datetime import datetime, timedelta
 from typing import List
 
-@register("exchange_rate", "ExchangeRateQuery", "查询货币汇率的插件", "1.0.0")
+@register("exchange_rate", "ExchangeRateQuery", "查询货币汇率的插件", "1.1.0")
 class ExchangeRateQueryPlugin(Star):
     def __init__(self, context: Context, config: AstrBotConfig):
         super().__init__(context)
