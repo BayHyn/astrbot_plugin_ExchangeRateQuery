@@ -5,11 +5,11 @@
         "hint": "支持Open Exchange Rate的免费API",
         "default": ""
     },
-    "fuzzy_match": {
-        "description": "是否模糊匹配触发",
-        "type": "bool",
-        "hint": "消息中含有关键词即可触发，谨慎打开，容易误触",
-        "default": false
+    "past_day": {
+        "description": "与过去第几天对比",
+        "type": "int",
+        "hint": "默认一周前",
+        "default": 7
     },
     "base_currency": {
         "description": "基准货币",

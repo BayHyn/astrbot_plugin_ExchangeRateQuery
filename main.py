@@ -6,14 +6,14 @@ from astrbot.api import logger
 from .OpenExchangeRate import OpenExchangeRate
 
 from datetime import datetime, timedelta
-from typing import List, Tuple
+from typing import List
 
 @register("exchange_rate", "ExchangeRateQuery", "查询货币汇率的插件", "1.0.0")
 class ExchangeRateQueryPlugin(Star):
     def __init__(self, context: Context, config: AstrBotConfig):
         super().__init__(context)
         self.api_key: str = config.get("api_key", "")
-        self.fuzzy_match: int = config.get("fuzzy_match", True)
+        self.past_day: int = config.get("past_day", 7)
         self.base_currency: dict = config.get("base_currency", "CNY")
         self.default_currencies: List[str] = config.get("target_currencies", ["USD", "EUR", "JPY"])
 
@@ -94,7 +94,7 @@ class ExchangeRateQueryPlugin(Star):
         try:
             # 获取当前和一周前汇率
             current_date = datetime.now()
-            week_ago = current_date - timedelta(days=7)
+            week_ago = current_date - timedelta(days=self.past_day)
 
             current_rates = await self.client.fetch_latest_rates(base_currency)
             historical_rates = await self.client.fetch_historical_rates(
@@ -126,7 +126,7 @@ class ExchangeRateQueryPlugin(Star):
         """格式化汇率对比结果"""
         header = f"📈 【{base} 汇率对比报告】\n"
         separator = "\n"
-        table_header = "货币 | 当前汇率 | 一周前   | 变化\n"
+        table_header = f"货币 | 当前汇率 | {self.past_day}天前   | 变化\n"
 
         rows = []
         for currency in targets:
