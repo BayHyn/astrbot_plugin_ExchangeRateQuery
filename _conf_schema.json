@@ -27,5 +27,11 @@
             "EUR",
             "JPY"
           ]
-    }
+    },
+    "enable_t2i": {
+    "description": "输出文本转图像输出",
+    "type": "bool",
+    "hint": "是否根据使用文本转图像功能",
+    "default": true
+  }
 }
