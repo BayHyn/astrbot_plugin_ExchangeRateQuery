@@ -24,6 +24,7 @@
         "hint": "目标货币，默认为[USD EUR JPY]",
         "default": [
             "USD",
+            "RUB",
             "EUR",
             "JPY"
           ]

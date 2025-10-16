@@ -4,9 +4,10 @@ from astrbot.core import AstrBotConfig
 from astrbot.api import logger
 
 from .OpenExchangeRate import OpenExchangeRate
+from .src import EXCHANGE_RATE_TMPL
 
 from datetime import datetime, timedelta
-from typing import List
+from typing import Any, List
 
 
 @register(
@@ -23,7 +24,7 @@ class ExchangeRateQueryPlugin(Star):
         self.past_day: int = config.get("past_day", 7)
         self.base_currency: str = config.get("base_currency", "CNY")
         self.default_currencies: list[str] = config.get(
-            "target_currencies", ["USD", "EUR", "JPY"]
+            "target_currencies", ["USD", "RUB", "EUR", "JPY"]
         )
         self.enable_t2i: bool = config.get("enable_t2i", False)
 
@@ -31,6 +32,7 @@ class ExchangeRateQueryPlugin(Star):
             logger.error("未配置OpenExchangeRates API KEY!")
 
         self.client = OpenExchangeRate(self.api_key)
+
 
     @filter.command("汇率帮助", alias={"汇率查询"})
     async def exchange_query_help(self, event: AstrMessageEvent):
@@ -50,6 +52,7 @@ class ExchangeRateQueryPlugin(Star):
         else:
             yield event.plain_result("\n".join(report))
 
+
     @filter.command("汇率代码", alias={"货币代码"})
     async def currencies_query(self, event: AstrMessageEvent):
         """获取支持的货币代码与名称"""
@@ -65,6 +68,7 @@ class ExchangeRateQueryPlugin(Star):
             yield event.image_result(url)
         else:
             yield event.plain_result(formatted_currencies)
+
 
     @filter.command("汇率usage", alias={"健康值"})
     async def usage_query(self, event: AstrMessageEvent):
@@ -121,9 +125,10 @@ class ExchangeRateQueryPlugin(Star):
             logger.error(f"健康值查询失败: {str(e)}")
             yield event.plain_result("获取健康值失败，请检查服务器日志")
 
+
     @filter.command("汇率", alias={"汇率查询"})
     async def exchange_rate_query(self, event: AstrMessageEvent):
-        """查询货币汇率 格式：/汇率 [基准货币] [目标货币1] [目标货币2] 示例：/汇率 USD JPY CNY"""
+        """查询货币汇率"""
         if not self.api_key:
             yield event.plain_result("控制台未配置API密钥")
             return
@@ -153,26 +158,46 @@ class ExchangeRateQueryPlugin(Star):
                 week_ago.strftime("%Y-%m-%d"), base_currency
             )
 
-            # 生成对比结果
-            result = self._format_comparison(
-                currencies,
-                base_currency,
-                current_rates,
-                historical_rates,
-                target_currencies,
-            )
-
             if self.enable_t2i:
-                url = await self.text_to_image(result)
-                yield event.image_result(url)
+                # 使用自定义HTML模板渲染图片
+                html_data = self._format_html_comparison(
+                    currencies,
+                    base_currency,
+                    current_rates,
+                    historical_rates,
+                    target_currencies,
+                )
+                try:
+                    url = await self.html_render(EXCHANGE_RATE_TMPL, html_data)
+                    yield event.image_result(url)
+                except Exception as e:
+                    logger.error(f"HTML渲染失败: {str(e)}")
+                    # 生成对比结果
+                    text_result = self._format_text_comparison(
+                        currencies,
+                        base_currency,
+                        current_rates,
+                        historical_rates,
+                        target_currencies,
+                    )
+                    yield event.plain_result(text_result)
             else:
-                yield event.plain_result(result)
+                # 生成对比结果
+                text_result = self._format_text_comparison(
+                    currencies,
+                    base_currency,
+                    current_rates,
+                    historical_rates,
+                    target_currencies,
+                )
+                yield event.plain_result(text_result)
 
         except Exception as e:
             logger.error(f"汇率查询失败: {str(e)}")
             yield event.plain_result("汇率查询失败，请稍后再试")
 
-    def _format_comparison(
+
+    def _format_text_comparison(
         self,
         currencies: dict[str, str],
         base: str,
@@ -180,14 +205,12 @@ class ExchangeRateQueryPlugin(Star):
         historical: dict[str, float],
         targets: list[str],
     ) -> str:
-        """格式化汇率对比结果为表格形式"""
-        # 创建表格头部
-        header = f"📈 【{base}({currencies.get(base)}) 汇率对比报告】\n\n"
-        table_header = "| 货币 | 当前汇率 | {}天前 |  变化   |\n".format(self.past_day)
-        separator = "|------|----------|--------|----------|\n"
-
-        # 创建表格行
-        rows = []
+        """格式化汇率对比结果为文本形式"""
+        base_currency_name = currencies.get(base, base)
+        result = [f"💱 【{base}({base_currency_name}) 汇率对比报告】"]
+        result.append(f"📊 对比时间范围: {self.past_day}天前 vs 当前")
+        result.append("")
+        
         for currency in targets:
             curr_rate = current.get(currency)
             hist_rate = historical.get(currency)
@@ -195,20 +218,66 @@ class ExchangeRateQueryPlugin(Star):
             if curr_rate and hist_rate:
                 change = curr_rate - hist_rate
                 change_percent = (change / hist_rate) * 100
+                arrow = "📈" if change > 0 else ("📉" if change < 0 else "➡️")
+                trend = "上涨" if change > 0 else ("下跌" if change < 0 else "持平")
+                
+                currency_name = currencies.get(currency, currency)
+                
+                result.append(f"💰 {currency}({currency_name}):")
+                result.append(f"   • 当前汇率: 1 {base} = {curr_rate:.4f} {currency}")
+                result.append(f"   • {self.past_day}天前: 1 {base} = {hist_rate:.4f} {currency}")
+                result.append(f"   • 变化: {arrow} {change:+.4f} ({change_percent:+.2f}%) {trend}")
+                result.append("")
+
+        if len(result) == 3:  # 只有标题和时间范围，没有有效数据
+            result.append("❌ 未找到有效的汇率数据")
+
+        return "\n".join(result)
+
+
+    def _format_html_comparison(
+        self,
+        currencies: dict[str, str],
+        base: str,
+        current: dict[str, float],
+        historical: dict[str, float],
+        targets: list[str],
+    ) -> dict[str, str | int | list[Any]]:
+        """准备HTML模板渲染所需的数据"""
+        base_currency_name = currencies.get(base, base)
+        comparisons = []
+        
+        for currency in targets:
+            curr_rate = current.get(currency)
+            hist_rate = historical.get(currency)
+
+            if curr_rate and hist_rate:
+                change = curr_rate - hist_rate
+                change_percent = (change / hist_rate) * 100
+                trend = "up" if change > 0 else ("down" if change < 0 else "same")
+                trend_text = "上涨" if change > 0 else ("下跌" if change < 0 else "持平")
                 arrow = "↑" if change > 0 else ("↓" if change < 0 else "→")
+                
+                comparisons.append({
+                    "currency_code": currency,
+                    "currency_name": currencies.get(currency, currency),
+                    "current_rate": f"{curr_rate:.4f}",
+                    "historical_rate": f"{hist_rate:.4f}",
+                    "change_value": f"{change:+.4f}",
+                    "change_percent": f"{change_percent:+.2f}%",
+                    "trend": trend,
+                    "trend_text": trend_text,
+                    "arrow": arrow
+                })
 
-                # 格式化变化值和百分比
-                change_str = f"{change:+.4f} ({change_percent:+.2f}%) {arrow}"
+        return {
+            "base_currency": base,
+            "base_currency_name": base_currency_name,
+            "past_days": self.past_day,
+            "comparisons": comparisons,
+            "update_time": datetime.now().strftime("%Y-%m-%d %H:%M")
+        }
 
-                row = f"| {currency:3}({currencies.get(currency)}) | {curr_rate:8.4f} | {hist_rate:6.4f} | {change_str:8} |"
-                rows.append(row)
-
-        if not rows:
-            return header + "未找到有效的汇率数据"
-
-        # 组合所有部分
-        table = header + table_header + separator + "\n".join(rows)
-        return table
 
     async def terminate(self):
         await self.client.close()
